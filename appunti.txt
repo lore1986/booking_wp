@@ -1,0 +1,19 @@
+<div class="accordion">
+            <!-- Tab 1: Add Event -->
+            <h3>Add Event</h3>
+            <div class="accordion-content">
+                
+            </div>
+
+            <!-- Tab 2: Edit Event -->
+            <h3>Edit Event</h3>
+            <div class="accordion-content">
+                <?php irish_pub_firenze_edit_event_tab(); ?>
+            </div>
+
+            <!-- Tab 3: Delete Event -->
+            <h3>Delete Event</h3>
+            <div class="accordion-content">
+                <?php irish_pub_firenze_delete_event_tab(); ?>
+            </div>
+        </div>
