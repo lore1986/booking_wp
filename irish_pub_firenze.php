@@ -38,6 +38,7 @@ function create_irish_pub_firenze_table() {
         date_event DATETIME,
         type_event ENUM('sport', 'food', 'music'),
         maxnum INT,
+        booked INT,
         description_event TEXT,
         image_path VARCHAR(255),
         PRIMARY KEY (event_id)

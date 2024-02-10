@@ -5,7 +5,6 @@ if ( ! function_exists( 'wp_handle_upload' ) ) {
 }
 
 function get_previous_month($ddate) {
-    // 1 == January, ... 12 == December
     $current_month_number = (int) date('m', strtotime($ddate));
   
     $months = [
@@ -25,88 +24,198 @@ function get_previous_month($ddate) {
   
     return $months[$current_month_number - 1];
   }
+
+
+  function irish_pub_firenze_query_events($startdate, $enddate)
+  { 
+    global $wpdb;
+
+    $start_date = date('Y-m-d', strtotime($startdate));
+    $end_date = date('Y-m-d', strtotime($enddate));
+
+    $events = [];
+
+    $query = $wpdb->prepare("
+        SELECT *
+        FROM {$wpdb->prefix}ipf_events
+        WHERE date_event BETWEEN %s AND %s
+    ", $start_date, $end_date);
+
+    $results = $wpdb->get_results($query);
+
+    if ($results) {
+        foreach ($results as $event) {
+            $single_ev = new stdClass();
+            $single_ev->event_id = $event->event_id;
+            $single_ev->event_title = $event->event_title;
+
+            // Assuming date_event is stored as a DATE type
+            $single_ev->date_event = $event->date_event;
+            $single_ev->time_event = ''; // No time component available for DATE type
+
+            $single_ev->type_event = $event->type_event;
+            $single_ev->maxnum = $event->maxnum;
+            $single_ev->booked = $event->booked;
+            $single_ev->description_event = $event->description_event;
+            $single_ev->image_path = $event->image_path;
+
+            array_push($events, $single_ev);
+        }
+    }
+
+    return $events;
+
+  }
+
+
+  function irish_pub_dynamic_calendar($startingDate, $html)
+  {
+    
+    $firstDayOfMonth = date('N', strtotime(date('01-m-Y', strtotime($startingDate))));
+
+    $month = date('m', strtotime('-1 month', strtotime($startingDate)));
+    $year = date('Y', strtotime('-1 month', strtotime($startingDate)));
+    
+    $totalDaysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+    
+    $startingDay = $totalDaysInMonth - $firstDayOfMonth + 1;
+    
+    $lastXDays = array();
+    
+    for ($day = $startingDay; $day <= $totalDaysInMonth; $day++) {
+        $lastXDays[] = $day;
+    }
+
+    $real_start_date = null;
+    if(!empty($lastXDays) && count($lastXDays) > 1)
+    {
+        $previous_first_counting_day = $lastXDays[1];
+        $real_start_date = date('Y-m-d', strtotime("$previous_first_counting_day-$month-$year"));
+    }
+
+    if($real_start_date == null)
+    {
+        $real_start_date = $startingDate;
+    }
+
+    $real_end_date = null;
+    $lastDayOfMonth = date('t-m-Y', strtotime($startingDate));
+    $sunday_this = date('w', strtotime($lastDayOfMonth));
+
+    if ($sunday_this != 0) {
+        $_next_month = date('Y-m-01', strtotime('+1 month', strtotime($startingDate)));
+        $day_to_sunday = 7 - $sunday_this;
+        $real_end_date = date('Y-m-d', strtotime("+$day_to_sunday days", strtotime($_next_month)));
+    }
+
+    if($real_end_date == null)
+    {
+        $real_end_date = $lastDayOfMonth;
+    }
+
+    $events = irish_pub_firenze_query_events($real_start_date, $real_end_date);
+
+    $html .= '<div class="row"> <div class="col-12" id="dynamic-calendar">';
+    // Generate the calendar grid
+    $currentDay = 1;
+    $currentExtra = 1;
+    $daysInMonth = date('t', strtotime($startingDate));
+    for ($i = 1; $i <= 5; $i++) { 
+        $html .= '<div class="row">';
+        for ($j = 1; $j <= 7; $j++) {
+            if ($i == 1 && $j < $firstDayOfMonth) {
+                if (!empty($lastXDays)) {
+                    $prev_d = array_shift($lastXDays) + 1;
+                    $prev_month_date = date('Y-m-d',  strtotime("$prev_d-$month-$year"));
+                    $html .= '<div class="col border">';
+                    $html .= '<p class="float-right my-auto">' . date('d-m', strtotime($prev_month_date)) . '</p>';
+                    foreach ($events as $event) {
+                        if ( date('Y-m-d', strtotime($event->date_event ))== $prev_month_date) {
+                                $html .= '<p>' . $event->event_title . '</p>'; 
+                                $html .= '<p>' . $event->type_event . '</p>'; 
+                            }
+                        }
+                    $html .= '</div>';
+                }
+            } else {
+                
+                if ($currentDay <= $daysInMonth) {
+                    $current_date = date('Y-m-d', strtotime(date('Y-m-', strtotime($startingDate)) . $currentDay));
+
+                    $html .= '<div class="col border">';
+                    $html .= '<p class="float-right my-auto">' . date('d-m', strtotime($current_date)) . '</p>';
+                    foreach ($events as $event) {
+                    if ( date('Y-m-d', strtotime($event->date_event ))== $current_date) {
+                            $html .= '<p>' . $event->event_title . '</p>'; 
+                            $html .= '<p>' . $event->type_event . '</p>'; 
+                        }
+                    }
+                    $html .= '</div>';
+                    $currentDay++;
+                }else
+                {
+                    $date_next_month = date('m', strtotime('+1 month', strtotime($startingDate)));
+                    $actual_today_next_month = date('Y-m-d', mktime(0, 0, 0, $date_next_month, $currentExtra));
+                    $html .= '<div class="col border">';
+                    $html .= '<p class="float-right my-auto">' . date('d-m', strtotime($actual_today_next_month)) . '</p>';
+                    foreach ($events as $event) {
+                        if ( date('Y-m-d', strtotime($event->date_event ))== $actual_today_next_month) {
+                                $html .= '<p>' . $event->event_title . '</p>'; 
+                                $html .= '<p>' . $event->type_event . '</p>'; 
+                            }
+                        }
+                    $html .= '</div>';
+                    $currentExtra++;
+                }
+            }
+        }
+        $html .= '</div>'; 
+    }
+
+    $html .= '</div></div></div>';
+
+    return $html;
+  }
+
+  function irish_pub_base_calendar($html)
+  {
+     // Define the array of days
+     $daysArr = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+     // Assuming $startingDate is already defined
+     
+ 
+     // Start generating the HTML
+     $html = '<div class="container">';
+     $html .= '<div class="row m-2"> 
+                   <div class="col-1 offset-4">
+                       <button class="btn btn-primary" id="next-month"> < </button>
+                   </div>
+                   <div class="col-1">
+
+                   </div>
+                   <div class="col-1">
+                       <button class="btn btn-primary" id="next-month"> > </button>
+                   </div>
+               </div>';
+ 
+     // Generate the row for days
+     $html .= '<div class="row mb-2">';
+     foreach ($daysArr as $day) {
+         $html .= '<div class="col border">';
+         $html .= '<p class="my-auto">' . $day . '</p>';
+         $html .= '</div>';
+     }
+     $html .= '</div>'; // Close row for days
+
+     return $html;
+  }
   
   
   function irish_pub_firenze_show_calendar()
   {
-      // Define the array of days
-      $daysArr = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-      // Assuming $startingDate is already defined
-      $startingDate = date('d-m-Y');
-  
-      // Start generating the HTML
-      $html = '<div class="container">';
-  
-      // Generate the row for days
-      $html .= '<div class="row">';
-      foreach ($daysArr as $day) {
-          $html .= '<div class="col border">';
-          $html .= '<p class="my-auto">' . $day . '</p>';
-          $html .= '</div>';
-      }
-      $html .= '</div>'; // Close row for days
-  
-      // Determine the first day of the month
-      $firstDayOfMonth = date('N', strtotime(date('01-m-Y', strtotime($startingDate))));
-
-      // Calculate the month and year of the previous month
-      $month = date('m', strtotime('-1 month', strtotime($startingDate)));
-      $year = date('Y', strtotime('-1 month', strtotime($startingDate)));
-      
-      // Get the total number of days in the previous month
-      $totalDaysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-      
-      // Calculate the starting day of the range
-      $startingDay = $totalDaysInMonth - $firstDayOfMonth + 1;
-      
-      // Initialize an array to store the last X days of the previous month
-      $lastXDays = array();
-      
-      // Iterate from the starting day to the last day of the previous month
-      for ($day = $startingDay; $day <= $totalDaysInMonth; $day++) {
-          $lastXDays[] = $day;
-      }
-      
-      // Generate the calendar grid
-      $currentDay = 1;
-      $currentExtra = 1;
-      $daysInMonth = date('t', strtotime($startingDate));
-      for ($i = 1; $i <= 5; $i++) { // Assume maximum of 6 rows
-          $html .= '<div class="row">';
-          for ($j = 1; $j <= 7; $j++) {
-              if ($i == 1 && $j < $firstDayOfMonth) {
-                  // Add days from the previous month
-                  if (!empty($lastXDays)) {
-                      $previousMonthDate = array_shift($lastXDays) + 1;
-                      $html .= '<div class="col border">';
-                      $html .= '<p class="float-right my-auto">' . date('d-m', strtotime("$previousMonthDate-$month-$year")) . '</p>';
-                      $html .= '</div>';
-                  }
-              } else {
-                  // Add days from the current month
-                  if ($currentDay <= $daysInMonth) {
-                      $html .= '<div class="col border">';
-                      $html .= '<p class="float-right my-auto">' . date('d-m', strtotime(date('Y-m-', strtotime($startingDate)) . $currentDay)) . '</p>';
-                      $html .= '</div>';
-                      $currentDay++;
-                  }else
-                  {
-                    $date_next_month = date('m', strtotime('+1 month', strtotime($startingDate)));
-                    $actual_today_next_month = date('d-m', mktime(0, 0, 0, $date_next_month, $currentExtra));
-                    $html .= '<div class="col border">';
-                    $html .= '<p class="float-right my-auto">' . $actual_today_next_month . '</p>';
-                    $html .= '</div>';
-                    $currentExtra++;
-                  }
-              }
-          }
-          $html .= '</div>'; // Close row
-      }
-  
-      $html .= '</div>'; // Close container
-  
-      // Return the generated HTML
-      return $html;
+    $html = irish_pub_base_calendar($html);
+    $html = irish_pub_dynamic_calendar(date('d-m-Y'), $html);
+    return $html;
   }
   
 
@@ -225,6 +334,8 @@ function irish_pub_firenze_event_tab() {
     
     <script>
         document.addEventListener("DOMContentLoaded", function() {
+            
+            
             var myLinks = document.querySelectorAll(".eventcaller");
             myLinks.forEach(function(link) {
                 link.addEventListener("click", function(event) {
@@ -245,6 +356,9 @@ function irish_pub_firenze_event_tab() {
                     }
                 });
             });
+
+
+
         });
     </script>
     <?php
